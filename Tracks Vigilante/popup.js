@@ -25,7 +25,6 @@
     const reloadButton = document.getElementById("reload");
     const table = document.getElementById("table");
     const filter = document.getElementById("filter");
-    const stats = document.getElementById("data");
     const extended = document.getElementById("extended");
     const select = document.getElementById("select-container");
 
@@ -57,8 +56,7 @@
      * It also sets the badge in the Chrome Extension Icon to 0.
      */
     function clearContents() {
-        chrome.action.setBadgeText({ text: "" });
-        chrome.storage.local.set({ url_array: [] }, () => stats.innerHTML = null);
+        chrome.runtime.sendMessage({ msg: "Clear" });
         reload();
     }
 

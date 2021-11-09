@@ -1,9 +1,45 @@
 (function () {
   'use strict';
 
+  /**
+   * The event data
+   * @typedef {Object} TrackEvent
+   * @property {string} key - The name of event
+   * @property {Object} values - The properties of the event
+   * @property {string} type - One of tracks-event, external, grafana
+   * @property {string} time - The string of timestamp
+   */
+
+  /**
+   * The storage data
+   * @typedef {Object} TrackStorage
+   * @property {TrackEvent[]} url_array - The triggered events
+   */
+
+  /** @type {TrackStorage} */
+  const storage = {
+    url_array: [],
+  };
+
+  // See: https://developer.chrome.com/docs/extensions/reference/storage/#asynchronous-preload-from-storage
+  chrome.action.onClicked.addListener(async () => {
+    try {
+      await initStorage();
+    } catch ( error ) {
+      // Ignore the error
+    }
+  })
+
   chrome.webRequest.onCompleted.addListener(onCompletedListener,
     { urls: ["*://pixel.wp.com/*",] }, ['responseHeaders']);
 
+  chrome.runtime.onMessage.addListener(
+    function (request) {
+      if ( request.msg === "Clear" ) {
+        clearData();
+      }
+    }
+  )
 
   function hasBeenReplaced( url ) {
     return url.includes( "https://pixel.wp.com" ) || url.includes( "http://pixel.wp.com" );
@@ -37,8 +73,7 @@
     const urlSearchParams = new URLSearchParams( url );
     const params = Object.fromEntries(urlSearchParams.entries());
 
-    chrome.storage.local.get( 'url_array', ( result ) => storeData( result, params, type ) );
-
+    storeData( params, type );
   }
 
   /**
@@ -57,29 +92,65 @@
 
   /**
    * 
-   * @param { {} } result Old data storage
    * @param { { key, value, type, time }[] } params New data storage
    * @param string type (tracks-event, external, grafana)
    */
-  function storeData( result, params, type ) {
+  async function storeData( params, type ) {
     let currentDate = new Date();
     let stringDate = currentDate.toLocaleTimeString();
-    if (!result?.url_array) {
-      result.url_array = [{ key: params._en, values: params, time: stringDate, type: type }];
-    } else {
-      result.url_array.push({ key: params._en, values: params, time: stringDate, type: type })
-    }
-    chrome.storage.local.set({ url_array: result.url_array }, () => sendMessageToVigilante(params));
-    updateBadge(result.url_array);
+    const url_array = storage?.url_array?.slice() || [];
+
+    url_array.push({ key: params._en, values: params, time: stringDate, type: type })
+
+    await updateStorage( { url_array } );
+    updateBadge( url_array );
+    sendMessageToVigilante( params );
+  }
+
+  /**
+   * Clear the data
+   */
+  async function clearData() {
+    await updateStorage( { url_array: [] });
+    updateBadge( [] );
+    sendMessageToVigilante( [] )
   }
 
   /**
    * Prints the small number in the Tracks Vigilante icon
    * 
-   * @param { {} } result our data array 
+   * @param { TrackEvent[] } trackEvents our data array
    */
-  function updateBadge( result ) {
-    chrome.action.setBadgeText({ text: result.length.toString() });
+  function updateBadge( trackEvents ) {
+    chrome.action.setBadgeText({ text: trackEvents.length > 0 ? trackEvents.length.toString() : "" });
+  }
+
+  /**
+   * Initialize the storage
+   */
+  async function initStorage() {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get( 'url_array', ( result ) => {
+        const error = chrome.runtime.lastError;
+        if ( error ) {
+          return reject( error );
+        }
+
+        Object.assign(storage, result);
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Update the data
+   * @param {TrackStorage} nextStorage The next data storage
+   */
+  async function updateStorage( nextStorage ) {
+    return new Promise((resolve) => {
+      Object.assign(storage, nextStorage);
+      chrome.storage.local.set( nextStorage, () => resolve() );
+    })
   }
 
   //Following code is to "revive" plugin if it has dead because of inactivity
