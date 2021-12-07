@@ -22,7 +22,7 @@
   };
 
   // See: https://developer.chrome.com/docs/extensions/reference/storage/#asynchronous-preload-from-storage
-  chrome.action.onClicked.addListener(async () => {
+  browser.browserAction.onClicked.addListener(async () => {
     try {
       await initStorage();
     } catch ( error ) {
@@ -122,7 +122,7 @@
    * @param { TrackEvent[] } trackEvents our data array
    */
   function updateBadge( trackEvents ) {
-    chrome.action.setBadgeText({ text: trackEvents.length > 0 ? trackEvents.length.toString() : "" });
+    browser.browserAction.setBadgeText({ text: trackEvents.length > 0 ? trackEvents.length.toString() : "" });
   }
 
   /**
@@ -176,11 +176,10 @@
     if (lifeline) return;
     for (const tab of await chrome.tabs.query({ url: '*://*/*' })) {
       try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          function: () => chrome.runtime.connect({ name: 'keepAlive' }),
-          // `function` will become `func` in Chrome 93+
-        });
+       browser.tabs.executeScript(
+        tab.id,
+        { code: `chrome.runtime.connect({ name: 'keepAlive' })` }
+       );
         chrome.tabs.onUpdated.removeListener(retryOnTabUpdate);
         return;
       } catch (e) { }
