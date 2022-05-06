@@ -23,6 +23,29 @@
 
   let vigilanteStatus = 'running';
 
+  const minTimeBetweenScreenshots = 1;
+  let lastTimeScreenshot = Math.floor( Date.now() / 1000 );
+  let lastScreenshot = null;
+  chrome.tabs.captureVisibleTab( null, { format: 'jpeg', quality: 35 }, function ( data ) {
+    lastScreenshot = data;
+  } );
+
+  async function shouldGenerateScreenshot () {
+    return new Promise( ( resolve, reject ) => {
+      const now = Math.floor( Date.now() / 1000 );
+      if ( ( now - lastTimeScreenshot ) >= minTimeBetweenScreenshots ) {
+        lastTimeScreenshot = Math.floor( Date.now() / 1000 );
+        chrome.tabs.captureVisibleTab( null, { format: 'jpeg', quality: 35 }, function ( data ) {
+          lastScreenshot = data;
+          resolve( data );
+          return data;
+        } );
+      }
+      resolve( lastScreenshot );
+      return lastScreenshot;
+    } );
+  }
+
   /**
    * Get Vigilante Status
    */
@@ -108,12 +131,14 @@
   /**
    * @param { Event } details for the completed request.
    */
-  function onCompletedListener ( details ) {
+  async function onCompletedListener ( details ) {
     if ( vigilanteStatus !== 'running' ) {
       return;
     }
     let url = details.url.replace( 'https://pixel.wp.com/t.gif?', '' ).replace( 'http://pixel.wp.com/t.gif?', '' );
     let type = '';
+
+    const screenshot = await shouldGenerateScreenshot();
 
     // TODO A bit ugly filter, to be improved for better readability
     if ( hasBeenReplaced( url ) ) {
@@ -135,7 +160,7 @@
     const urlSearchParams = new URLSearchParams( url );
     const params = Object.fromEntries( urlSearchParams.entries() );
 
-    storeData( params, type );
+    storeData( params, type, screenshot );
   }
 
   /**
@@ -157,12 +182,12 @@
    * @param { { key, value, type, time }[] } params New data storage
    * @param string type (tracks-event, external, grafana)
    */
-  async function storeData ( params, type ) {
+  async function storeData ( params, type, screenshot ) {
     const currentDate = new Date();
     const stringDate = currentDate.toLocaleTimeString();
     const urlArray = storage?.urlArray?.slice() || [];
 
-    urlArray.push( { key: params._en, values: params, time: stringDate, type: type } );
+    urlArray.push( { key: params._en, values: params, time: stringDate, type, screenshot } );
 
     await updateStorage( { urlArray } );
     updateBadge( urlArray );

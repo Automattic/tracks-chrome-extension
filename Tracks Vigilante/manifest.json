@@ -5,8 +5,11 @@
     "description": "Tracks network calls to Tracks",
     "permissions": [
       "activeTab",
+      "tabs" ,
+      "browsingData",
       "contextMenus",
       "scripting",
+      "unlimitedStorage",
       "background", 
       "webRequest",
       "storage"
